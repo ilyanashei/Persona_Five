@@ -8,6 +8,9 @@ local function dprint(...)
 	if DEBUG then print("[WallRemover]", ...) end
 end
 
+-- Track all walls we've found
+local trackedWalls = {}
+
 local function disableWall(wall)
 	if wall and wall:IsA("BasePart") then
 		dprint("═══════════════════════════════")
@@ -17,6 +20,9 @@ local function disableWall(wall)
 		dprint("CanCollide was:", wall.CanCollide)
 		
 		wall.CanCollide = false
+		
+		-- Add to tracked list
+		trackedWalls[wall] = true
 		
 		dprint("CanCollide now:", wall.CanCollide)
 		dprint("✓ WALL DISABLED!")
@@ -67,17 +73,33 @@ workspace.DescendantAdded:Connect(function(obj)
 	end
 end)
 
--- Continuously monitor in case collision gets re-enabled
+-- Monitor for walls being removed from tracking
+workspace.DescendantRemoving:Connect(function(obj)
+	if trackedWalls[obj] then
+		trackedWalls[obj] = nil
+	end
+end)
+
+-- OPTIMIZED: Only check tracked walls, not all descendants
+-- Run less frequently (every 0.5 seconds instead of every frame)
+local lastCheck = 0
 RunService.Heartbeat:Connect(function()
-	for _, obj in ipairs(workspace:GetDescendants()) do
-		if obj.Name == "Wall" and obj:IsA("BasePart") and obj.CanCollide then
-			obj.CanCollide = false
+	local now = tick()
+	if now - lastCheck < 0.5 then return end -- Only check twice per second
+	lastCheck = now
+	
+	-- Clean up destroyed walls
+	for wall, _ in pairs(trackedWalls) do
+		if not wall.Parent then
+			trackedWalls[wall] = nil
+		elseif wall.CanCollide then
+			wall.CanCollide = false
 		end
 	end
 end)
 
 dprint("═══════════════════════════════")
-dprint("WALL REMOVER ACTIVE")
+dprint("WALL REMOVER ACTIVE (OPTIMIZED)")
 dprint("═══════════════════════════════")
 dprint("Monitoring and disabling all Wall parts")
 dprint("Try walking through the net now!")
