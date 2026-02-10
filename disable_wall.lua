@@ -16,23 +16,18 @@ local function disableWall(wall)
 		dprint("═══════════════════════════════")
 		dprint("Found Wall!")
 		dprint("Path:", wall:GetFullName())
-		dprint("CanCollide was:", wall.CanCollide)
-		dprint("CanTouch was:", wall.CanTouch)
+		dprint("Original Size:", wall.Size)
 		
-		-- Disable collision and touch
-		wall.CanCollide = false
-		wall.CanTouch = false
-		wall.CanQuery = false
-		
-		-- Make it invisible (optional - remove if you want to see it)
-		wall.Transparency = 1
+		-- Set wall to exact net thickness (0.508 studs)
+		local netThickness = 0.508
+		local currentSize = wall.Size
+		wall.Size = Vector3.new(currentSize.X, currentSize.Y, netThickness)
 		
 		-- Add to tracked list
-		trackedWalls[wall] = true
+		trackedWalls[wall] = {originalSize = currentSize, netThickness = netThickness}
 		
-		dprint("CanCollide now:", wall.CanCollide)
-		dprint("CanTouch now:", wall.CanTouch)
-		dprint("✓ WALL DISABLED!")
+		dprint("New Size:", wall.Size)
+		dprint("✓ WALL RESIZED TO NET THICKNESS (0.508)!")
 		dprint("═══════════════════════════════")
 		return true
 	end
@@ -110,22 +105,23 @@ RunService.Heartbeat:Connect(function()
 	if now - lastCheck < 0.5 then return end
 	lastCheck = now
 	
-	-- Re-disable walls if they get re-enabled
-	for wall, _ in pairs(trackedWalls) do
+	-- Keep walls at net thickness if they get reset
+	for wall, data in pairs(trackedWalls) do
 		if not wall.Parent then
 			trackedWalls[wall] = nil
 		else
-			if wall.CanCollide or wall.CanTouch then
-				wall.CanCollide = false
-				wall.CanTouch = false
-				wall.CanQuery = false
+			-- Check if wall size got reset and re-apply net thickness
+			if wall.Size.Z > data.netThickness + 0.01 then
+				local currentSize = wall.Size
+				wall.Size = Vector3.new(currentSize.X, currentSize.Y, data.netThickness)
 			end
 		end
 	end
 end)
 
 dprint("═══════════════════════════════")
-dprint("WALL REMOVER ACTIVE (NO COLLISION)")
+dprint("WALL THINNER ACTIVE")
 dprint("═══════════════════════════════")
-dprint("Walls are now passable - walk through the net!")
+dprint("Walls resized to match net thickness!")
+dprint("Walk through the net naturally!")
 dprint("═══════════════════════════════")
