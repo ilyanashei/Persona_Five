@@ -8,99 +8,78 @@ local function dprint(...)
 	if DEBUG then print("[WallRemover]", ...) end
 end
 
--- Track all walls we've found
-local trackedWalls = {}
-
-local function disableWall(wall)
+local function deleteWall(wall)
 	if wall and wall:IsA("BasePart") then
 		dprint("═══════════════════════════════")
 		dprint("Found Wall!")
 		dprint("Path:", wall:GetFullName())
 		dprint("Position:", wall.Position)
-		dprint("CanCollide was:", wall.CanCollide)
 		
-		wall.CanCollide = false
+		wall:Destroy()
 		
-		-- Add to tracked list
-		trackedWalls[wall] = true
-		
-		dprint("CanCollide now:", wall.CanCollide)
-		dprint("✓ WALL DISABLED!")
+		dprint("✓ WALL DELETED!")
 		dprint("═══════════════════════════════")
 		return true
 	end
 	return false
 end
 
--- Search for Wall part
-local function findAndDisableWalls()
+-- Search for Wall parts in all courts
+local function findAndDeleteWalls()
 	local found = 0
 	
-	-- Check common parent locations
-	local searchLocations = {
-		workspace:FindFirstChild("Net"),
-		workspace:FindFirstChild("Collision"),
-		workspace:FindFirstChild("Map"),
-		workspace,
-	}
+	-- Find Courts folder
+	local courtsFolder = workspace:FindFirstChild("Courts")
 	
-	for _, location in ipairs(searchLocations) do
-		if location then
-			-- Look for "Wall" parts
-			for _, child in ipairs(location:GetDescendants()) do
+	if courtsFolder then
+		dprint("Found Courts folder, scanning all courts...")
+		
+		-- Go through every court
+		for _, court in ipairs(courtsFolder:GetChildren()) do
+			dprint("Scanning court:", court.Name)
+			
+			-- Look for "Wall" parts in this court
+			for _, child in ipairs(court:GetDescendants()) do
 				if child.Name == "Wall" and child:IsA("BasePart") then
-					if disableWall(child) then
+					if deleteWall(child) then
 						found = found + 1
 					end
 				end
 			end
 		end
+	else
+		dprint("WARNING: Courts folder not found in Workspace!")
 	end
 	
 	return found
 end
 
 -- Initial search
-dprint("Searching for Wall parts...")
-local found = findAndDisableWalls()
-dprint("Disabled", found, "walls")
+dprint("Searching for Wall parts in all courts...")
+local found = findAndDeleteWalls()
+dprint("Deleted", found, "walls across all courts")
 
--- Monitor for new Wall parts being added
+-- Monitor for new courts or walls being added
 workspace.DescendantAdded:Connect(function(obj)
+	-- Check if it's a wall being added to any court
 	if obj.Name == "Wall" and obj:IsA("BasePart") then
-		task.wait(0.1)  -- Wait a moment for it to fully load
-		disableWall(obj)
-	end
-end)
-
--- Monitor for walls being removed from tracking
-workspace.DescendantRemoving:Connect(function(obj)
-	if trackedWalls[obj] then
-		trackedWalls[obj] = nil
-	end
-end)
-
--- OPTIMIZED: Only check tracked walls, not all descendants
--- Run less frequently (every 0.5 seconds instead of every frame)
-local lastCheck = 0
-RunService.Heartbeat:Connect(function()
-	local now = tick()
-	if now - lastCheck < 0.5 then return end -- Only check twice per second
-	lastCheck = now
-	
-	-- Clean up destroyed walls
-	for wall, _ in pairs(trackedWalls) do
-		if not wall.Parent then
-			trackedWalls[wall] = nil
-		elseif wall.CanCollide then
-			wall.CanCollide = false
+		-- Verify it's inside a court
+		local parent = obj.Parent
+		while parent do
+			if parent.Parent == workspace:FindFirstChild("Courts") then
+				task.wait(0.1)
+				deleteWall(obj)
+				break
+			end
+			parent = parent.Parent
 		end
 	end
 end)
 
 dprint("═══════════════════════════════")
-dprint("WALL REMOVER ACTIVE (OPTIMIZED)")
+dprint("WALL REMOVER ACTIVE")
 dprint("═══════════════════════════════")
-dprint("Monitoring and disabling all Wall parts")
-dprint("Try walking through the net now!")
+dprint("Monitoring and deleting all Wall parts in all courts")
+dprint("Including regular courts, ranked courts, and KOTC")
+dprint("Try walking through any net now!")
 dprint("═══════════════════════════════")
