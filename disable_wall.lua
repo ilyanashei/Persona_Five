@@ -8,16 +8,31 @@ local function dprint(...)
 	if DEBUG then print("[WallRemover]", ...) end
 end
 
-local function deleteWall(wall)
+-- Track all walls we've found
+local trackedWalls = {}
+
+local function disableWall(wall)
 	if wall and wall:IsA("BasePart") then
 		dprint("═══════════════════════════════")
 		dprint("Found Wall!")
 		dprint("Path:", wall:GetFullName())
-		dprint("Position:", wall.Position)
+		dprint("CanCollide was:", wall.CanCollide)
+		dprint("CanTouch was:", wall.CanTouch)
 		
-		wall:Destroy()
+		-- Disable collision and touch
+		wall.CanCollide = false
+		wall.CanTouch = false
+		wall.CanQuery = false
 		
-		dprint("✓ WALL DELETED!")
+		-- Make it invisible (optional - remove if you want to see it)
+		wall.Transparency = 1
+		
+		-- Add to tracked list
+		trackedWalls[wall] = true
+		
+		dprint("CanCollide now:", wall.CanCollide)
+		dprint("CanTouch now:", wall.CanTouch)
+		dprint("✓ WALL DISABLED!")
 		dprint("═══════════════════════════════")
 		return true
 	end
@@ -25,7 +40,7 @@ local function deleteWall(wall)
 end
 
 -- Search for Wall parts in all courts
-local function findAndDeleteWalls()
+local function findAndDisableWalls()
 	local found = 0
 	
 	-- Find Courts folder
@@ -33,18 +48,27 @@ local function findAndDeleteWalls()
 	
 	if courtsFolder then
 		dprint("Found Courts folder, scanning all courts...")
+		dprint("Number of courts found:", #courtsFolder:GetChildren())
 		
 		-- Go through every court
 		for _, court in ipairs(courtsFolder:GetChildren()) do
-			dprint("Scanning court:", court.Name)
+			dprint("---")
+			dprint("Checking court:", court.Name, "| Type:", court.ClassName)
 			
-			-- Look for "Wall" parts in this court
-			for _, child in ipairs(court:GetDescendants()) do
-				if child.Name == "Wall" and child:IsA("BasePart") then
-					if deleteWall(child) then
-						found = found + 1
-					end
+			-- Look for Wall directly in Court
+			local wall = court:FindFirstChild("Wall")
+			if wall then
+				dprint("  Found Wall in", court.Name, "!")
+				if disableWall(wall) then
+					found = found + 1
 				end
+			else
+				dprint("  ERROR: No Wall found directly in court")
+				local children = {}
+				for _, child in ipairs(court:GetChildren()) do
+					table.insert(children, child.Name)
+				end
+				dprint("  Court children:", table.concat(children, ", "))
 			end
 		end
 	else
@@ -56,30 +80,52 @@ end
 
 -- Initial search
 dprint("Searching for Wall parts in all courts...")
-local found = findAndDeleteWalls()
-dprint("Deleted", found, "walls across all courts")
+local found = findAndDisableWalls()
+dprint("Disabled", found, "walls across all courts")
 
--- Monitor for new courts or walls being added
+-- Monitor for new walls being added
 workspace.DescendantAdded:Connect(function(obj)
-	-- Check if it's a wall being added to any court
 	if obj.Name == "Wall" and obj:IsA("BasePart") then
-		-- Verify it's inside a court
-		local parent = obj.Parent
-		while parent do
-			if parent.Parent == workspace:FindFirstChild("Courts") then
-				task.wait(0.1)
-				deleteWall(obj)
-				break
+		-- Check if it's directly in a Court: Courts > Court > Wall
+		local court = obj.Parent
+		if court and court.Parent == workspace:FindFirstChild("Courts") then
+			task.wait(0.1)
+			disableWall(obj)
+		end
+	end
+end)
+
+-- Monitor for walls being removed from tracking
+workspace.DescendantRemoving:Connect(function(obj)
+	if trackedWalls[obj] then
+		trackedWalls[obj] = nil
+	end
+end)
+
+-- OPTIMIZED: Only check tracked walls
+-- Run less frequently (every 0.5 seconds)
+local lastCheck = 0
+RunService.Heartbeat:Connect(function()
+	local now = tick()
+	if now - lastCheck < 0.5 then return end
+	lastCheck = now
+	
+	-- Re-disable walls if they get re-enabled
+	for wall, _ in pairs(trackedWalls) do
+		if not wall.Parent then
+			trackedWalls[wall] = nil
+		else
+			if wall.CanCollide or wall.CanTouch then
+				wall.CanCollide = false
+				wall.CanTouch = false
+				wall.CanQuery = false
 			end
-			parent = parent.Parent
 		end
 	end
 end)
 
 dprint("═══════════════════════════════")
-dprint("WALL REMOVER ACTIVE")
+dprint("WALL REMOVER ACTIVE (NO COLLISION)")
 dprint("═══════════════════════════════")
-dprint("Monitoring and deleting all Wall parts in all courts")
-dprint("Including regular courts, ranked courts, and KOTC")
-dprint("Try walking through any net now!")
+dprint("Walls are now passable - walk through the net!")
 dprint("═══════════════════════════════")
